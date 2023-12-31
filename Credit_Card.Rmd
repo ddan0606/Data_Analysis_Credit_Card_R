@@ -1,0 +1,298 @@
+---
+title: "Phân tích dữ liệu với R"
+output:
+  html_document: default
+  pdf_document: default
+date: "2023-12-03"
+---
+
+## Tải các gói chức năng
+```{r setup, include = TRUE}
+library(readr)
+library(dplyr)
+library(ggplot2)
+library(corrplot)
+library(caret)
+library(randomForest)
+```
+
+### Đọc dữ liệu
+```{r}
+df <- read_csv("C:\\Users\\nguye\\OneDrive - Ho Chi Minh City University of Foreign Languages and Information Technology - HUFLIT\\Documents\\Big Data\\credit_card.csv")
+
+credit = subset(df, select = c("LIMIT_BAL", "SEX", "EDUCATION", "MARRIAGE", "AGE", 
+                               "PAY_0", "PAY_2", "PAY_3", "PAY_4", "PAY_5", "PAY_6",
+                               "BILL_AMT1", "BILL_AMT2", "BILL_AMT3", "BILL_AMT4", "BILL_AMT5", "BILL_AMT6",
+                               "PAY_AMT1", "PAY_AMT2", "PAY_AMT3", "PAY_AMT4", "PAY_AMT5", "PAY_AMT6", 
+                               "default.payment.next.month"))
+
+head(credit)
+```
+
+```{r}
+sapply(credit, class)
+```
+
+```{r}
+df_na <- data.frame(cbind("Column" = names(credit),
+                          "Null Values" = colSums(is.na(credit))))
+df_na
+```
+
+```{r}
+duplicates <- credit%>%duplicated()
+duplicates_amount <- duplicates%>%(table)
+duplicates_amount
+```
+
+```{r}
+credit <- credit%>%distinct()
+duplicates_counts_unique <- credit%>%duplicated()%>%table()
+duplicates_counts_unique
+```
+
+### Tiền xử lý dữ liệu
+```{r}
+unique(credit$SEX)[order(unique(credit$SEX))]
+```
+
+```{r}
+unique(credit$EDUCATION)[order(unique(credit$EDUCATION))]
+```
+
+```{r}
+unique(credit$MARRIAGE)[order(unique(credit$MARRIAGE))]
+```
+
+```{r}
+unique(credit$PAY_0)[order(unique(credit$PAY_0))]
+```
+
+```{r}
+unique(credit$default.payment.next.month)[order(unique(credit$default.payment.next.month))]
+```
+
+```{r}
+fill <- credit$EDUCATION %in% c(0, 5, 6)
+
+credit$EDUCATION <- ifelse(fill, 4, credit$EDUCATION)
+```
+
+```{r}
+unique(credit$EDUCATION)[order(unique(credit$EDUCATION))]
+```
+
+```{r}
+fill <- credit$MARRIAGE == 0
+
+credit$MARRIAGE <- ifelse(credit$MARRIAGE == 0, 2, credit$MARRIAGE)
+```
+
+```{r}
+unique(credit$MARRIAGE)[order(unique(credit$MARRIAGE))]
+```
+
+```{r}
+names(credit)[names(credit) == "default.payment.next.month"] <- "DEFAULT"
+names(credit)[names(credit) == "PAY_0"] <- "PAY_1"
+```
+
+```{r}
+head(credit)
+```
+
+```{r}
+credit1 <- data.frame(credit)
+head(credit1)
+```
+
+```{r}
+credit$SEX[credit$SEX %in% "1"] = "Male"
+credit$SEX[credit$SEX %in% "2"] = "Female"
+
+credit$EDUCATION[credit$EDUCATION %in% "1"] = "Graduate School"
+credit$EDUCATION[credit$EDUCATION %in% "2"] = "University"
+credit$EDUCATION[credit$EDUCATION %in% "3"] = "High School"
+credit$EDUCATION[credit$EDUCATION %in% "4"] = "Others"
+
+credit$MARRIAGE[credit$MARRIAGE %in% "1"] = "Married"
+credit$MARRIAGE[credit$MARRIAGE %in% "2"] = "Single"
+credit$MARRIAGE[credit$MARRIAGE %in% "3"] = "Others"
+
+credit$DEFAULT[credit$DEFAULT %in% "0"] = "No"
+credit$DEFAULT[credit$DEFAULT %in% "1"] = "Yes"
+
+head(credit)
+```
+
+### Phân tích dữ liệu khám phá
+```{r}
+order_vector <- c("No", "Yes")
+counts_DEFAULT <- table(credit$DEFAULT)[order_vector]
+barplot(counts_DEFAULT, col = c("#3274A1", "#E1812C"))
+
+counts_DEFAULT
+```
+
+```{r}
+order_vector <- c("Male", "Female")
+counts_SEX <- table(credit$SEX)[order_vector]
+barplot(counts_SEX, col = c("#3274A1", "#E1812C"))
+
+counts_SEX
+```
+
+```{r}
+order_vector <- c("Graduate School", "University", "High School", "Others")
+counts_EDUCATION <- table(credit$EDUCATION)[order_vector]
+barplot(counts_EDUCATION, col = c("#3274A1", "#E1812C", "#3A923A", "#BF3C3D"))
+
+counts_EDUCATION
+```
+
+```{r}
+order_vector <- c("Married", "Single", "Others")
+counts_MARRIAGE <- table(credit$MARRIAGE)[order_vector]
+barplot(counts_MARRIAGE, col = c("#3274A1", "#E1812C", "#3A923A"))
+
+counts_MARRIAGE
+```
+
+```{r}
+table.default_gender <- table(credit$DEFAULT, credit$SEX)
+table.default_gender <- table.default_gender[, c(2, 1)]
+
+barplot(table.default_gender, col = c("#3274A1", "#E1812C"), beside = T,
+        names.arg = c("Male", "Female"))
+legend("topright", legend = c("Yes", "No"), fill = c("#3274A1", "#E1812C"))
+
+table.default_gender
+
+prop.table(table.default_gender, 2)
+```
+
+```{r}
+credit$EDUCATION <- as.factor(credit$EDUCATION)
+
+table.default_education <- table(credit$DEFAULT, credit$EDUCATION)
+
+order_vector <- c("Graduate School", "University", "High School", "Others")
+edu_idx <- match(order_vector, levels(credit$EDUCATION)) 
+table.default_education <- table.default_education[, edu_idx]
+
+barplot(table.default_education, col = c("#3274A1", "#E1812C"), beside = T,  
+        names.arg = order_vector)
+legend("topright", legend = c("Yes", "No"), fill = c("#3274A1", "#E1812C"))
+
+table.default_education
+
+prop.table(table.default_education, 2)
+```
+
+```{r}
+credit$MARRIAGE <- as.factor(credit$MARRIAGE)
+
+table.default_marriage <- table(credit$DEFAULT, credit$MARRIAGE)
+
+order_vector <- c("Married", "Single", "Others")
+edu_idx <- match(order_vector, levels(credit$MARRIAGE)) 
+table.default_marriage <- table.default_marriage[, edu_idx]
+
+barplot(table.default_marriage, col = c("#3274A1", "#E1812C"), beside = T,  
+        names.arg = order_vector)
+legend("topright", legend = c("Yes", "No"), fill = c("#3274A1", "#E1812C"))
+
+table.default_marriage
+
+prop.table(table.default_marriage, 2)
+```
+```{r}
+credit$PAY_1 <- as.factor(credit$PAY_1)
+table.default_pay1 <- table(credit$DEFAULT, credit$PAY_1)
+
+table.default_pay1
+prop.table(table.default_pay1, 2)
+```
+
+```{r}
+tab <- t(table(credit$AGE, credit$DEFAULT)[1:10,])
+tab
+
+tab_prop <- t(prop.table(table(credit$AGE, credit$DEFAULT)[1:10,], 1))
+tab_prop
+
+ggplot(credit, aes(x = DEFAULT, y = LIMIT_BAL, color = DEFAULT)) +
+  scale_color_manual(values = c("#1f77b4", "#ff7f0e")) +
+  geom_point(position = position_jitter(width = 0.2))
+```
+
+```{r}
+df_cor <- credit1 %>%
+  mutate_if(is.factor, as.numeric)
+```
+
+```{r}
+df_num <- df_cor[, 1:ncol(credit)]
+cor_mat <- cor(df_num)
+corrplot(cor_mat,
+         method = "number",
+         col = colorRampPalette(c("#3274A1", "#E1812C", "black"))(100),
+         tl.col = "black",
+         number.cex = 0.4,
+         tl.cex = 0.7,
+         addCoef.col = "black"
+)
+```
+
+```{r}
+df_num <- df_cor[, 1:ncol(df_cor)]
+cor_mat <- cor(df_num)
+default_col <- t(cor_mat[, which(names(df_num) == "DEFAULT")])
+default_col <- t(default_col)
+default_col
+```
+
+### Chia tỷ lệ dữ liệu
+```{r}
+credit1 = credit1 %>% mutate_at(c(0:23), funs(c(scale(.))))
+
+head(credit1)
+```
+
+```{r}
+set.seed(123)
+
+sample <- sample(c(TRUE, FALSE), nrow(credit1), replace = TRUE, prob = c(0.50, 0.50))
+train_set <- credit1[sample, ]
+test_set <- credit1[!sample, ]
+```
+
+### Tạo mô hình dự đoán
+#### Logistic Regression
+```{r}
+fit_glm <- glm(DEFAULT ~ ., data = train_set, family = binomial())
+summary(fit_glm)
+```
+
+```{r}
+pred_probs <- predict.glm(fit_glm, newdata = train_set, type = "response")
+head(pred_probs)
+```
+
+```{r}
+pred <- ifelse(pred_probs < 0.5, 0,1)
+confusion_table <- table(train_set$DEFAULT, pred)
+confusionMatrix(confusion_table)
+```
+
+#### Random Forest
+```{r}
+set.seed(123)
+fit_rf <- randomForest(factor(DEFAULT) ~., mtry = 5, data = train_set)
+fit_rf
+summary(fit_rf)
+```
+
+```{r}
+varImpPlot(fit_rf)
+```
